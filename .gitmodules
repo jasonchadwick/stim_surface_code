@@ -1,3 +1,0 @@
-[submodule "qc_utils"]
-	path = qc_utils
-	url = git@github.com:jasonchadwick/qc_utils.git
