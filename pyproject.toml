@@ -14,6 +14,7 @@ matplotlib = "^3.8.2"
 SciPy = "^1.11.4"
 numpy = "^1.26.3"
 typing-extensions = "^4.9.0"
+qc-utils = {git = "https://github.com/jasonchadwick/qc_utils.git"}
 
 
 [build-system]
