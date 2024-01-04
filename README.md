@@ -4,7 +4,7 @@
 
 Install via pip or poetry or whatever you want.
 
-`poetry add git+https://github.com/jasonchadwick/qc_utils`
+`poetry add git+https://github.com/jasonchadwick/stim_surface_code`
 
-`pip install git+https://github.com/jasonchadwick/qc_utils`
+`pip install git+https://github.com/jasonchadwick/stim_surface_code`
 
