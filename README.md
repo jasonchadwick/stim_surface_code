@@ -1,4 +1,6 @@
-# stim-surface-code
+# stim_surface_code
+
+A package I put together as a convenience for myself. Defines surface code patches in Stim with a flexible noise model framework.
 
 ## Installation
 
