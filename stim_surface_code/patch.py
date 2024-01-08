@@ -13,6 +13,7 @@ import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import stim
 import sinter
 import pymatching
@@ -1266,13 +1267,14 @@ class SurfaceCodePatch():
             max_val = (max(qubit_vals) if vmin is None else vmax)
         
         if ax is None:
-            fig, ax = plt.subplots(figsize=(6,6))
-            if qubit_vals is not None:
-                fig.subplots_adjust(right=0.8)
-                cbar_ax = fig.add_axes([0.85, 0.15, 0.02, 0.7])
-                cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm(vmin=min_val, vmax=max_val), cmap=cmap_name), cax=cbar_ax)
+            fig,ax = plt.subplots(figsize=(6,6))
         else:
             fig = ax.get_figure()
+        
+        if qubit_vals is not None:
+            divider = make_axes_locatable(ax)
+            cbar_ax = divider.append_axes('right', size='5%', pad=0.05)
+            cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm(vmin=min_val, vmax=max_val), cmap=cmap_name), cax=cbar_ax)
 
         ax.invert_yaxis()
         ax.set_aspect('equal')
