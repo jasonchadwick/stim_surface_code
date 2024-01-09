@@ -13,11 +13,11 @@ import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import stim
 import sinter
 import pymatching
 import qc_utils.matplotlib_setup as mpl_setup
+import qc_utils.plot as plot_utils
 
 class Qubit():
     """A single physical qubit on a device.
@@ -1242,7 +1242,7 @@ class SurfaceCodePatch():
             vmin: float | None = None,
             vmax: float | None = None,
             norm: mpl.colors.Normalize = mpl.colors.Normalize,
-        ):
+        ) -> plt.Axes:
         """Plot qubit values as a heatmap.
 
         If neither qubit_vals nor qubit_colors are given, plot qubit colors
@@ -1257,6 +1257,12 @@ class SurfaceCodePatch():
                 If 'none', do not plot text.
             cmap_name: Name of matplotlib colormap to use.
             font_size: Font size for text.
+            vmin: Minimum value for colormap. If None, use min(qubit_vals).
+            vmax: Maximum value for colormap. If None, use max(qubit_vals).
+            norm: Normalization function for colormap.
+
+        Returns:
+            Axes containing plot.
         """
 
         xlims = (-1, 2*self.dz+2)
@@ -1272,9 +1278,7 @@ class SurfaceCodePatch():
             fig = ax.get_figure()
         
         if qubit_vals is not None:
-            divider = make_axes_locatable(ax)
-            cbar_ax = divider.append_axes('right', size='5%', pad=0.05)
-            cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm(vmin=min_val, vmax=max_val), cmap=cmap_name), cax=cbar_ax)
+            plot_utils.add_cbar(ax, norm(vmin=min_val, vmax=max_val), cmap_name)
 
         ax.invert_yaxis()
         ax.set_aspect('equal')
