@@ -1262,7 +1262,8 @@ class SurfaceCodePatch():
             norm: Normalization function for colormap.
 
         Returns:
-            Axes containing plot.
+            ax: Axes containing plot.
+            cbar: Colorbar associated with plot, or None if qubit_vals is None.
         """
 
         xlims = (-1, 2*self.dz+2)
@@ -1277,8 +1278,9 @@ class SurfaceCodePatch():
         else:
             fig = ax.get_figure()
         
+        cbar = None
         if qubit_vals is not None:
-            plot_utils.add_cbar(ax, norm(vmin=min_val, vmax=max_val), cmap_name)
+            cbar = plot_utils.add_cbar(ax, norm(vmin=min_val, vmax=max_val), cmap_name)
 
         ax.invert_yaxis()
         ax.set_aspect('equal')
@@ -1328,7 +1330,7 @@ class SurfaceCodePatch():
         ax.set_xticks([])
         ax.set_yticks([])
 
-        return ax
+        return ax, cbar
 
     def plot_connection_vals(
             self,
