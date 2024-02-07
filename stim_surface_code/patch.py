@@ -75,7 +75,8 @@ class SurfaceCodePatch():
             meas_time: float = 500e-9, 
             reset_time: float = 250e-9, # Multi-level reset from McEwen et al. (2021)
             apply_idle_during_gates: bool = True,
-            save_stim_circuit: bool = False
+            save_stim_circuit: bool = False,
+            id_offset: int = 0,
         ) -> None:
         """Initializes the instance based on spam preference.
 
@@ -93,6 +94,7 @@ class SurfaceCodePatch():
                 error plus gate error rates).
             save_stim_circuit: If True, save each Stim circuit for quick
                 querying (if noise models have not changed since last time).
+            id_offset: Offset to add to qubit indices.
         """
         self.dx = dx
         self.dz = dz
@@ -104,13 +106,13 @@ class SurfaceCodePatch():
         assert len(self.device) == 2*dx+1
         assert len(self.device[0]) == 2*dz+1
 
-        self.data = self.place_data()
+        self.data = self.place_data(id_offset)
 
         (self.logical_x_qubits, 
          self.logical_z_qubits) = self.set_logical_operators()
 
         # create self.x_ancilla and self.z_ancilla; fill in self.device
-        self.place_ancilla()
+        self.place_ancilla(id_offset)
 
         self.ancilla = self.x_ancilla + self.z_ancilla
         self.all_qubits: list[DataQubit | MeasureQubit] = self.ancilla + self.data
@@ -197,15 +199,19 @@ class SurfaceCodePatch():
 
     def place_data(
             self,
+            id_offset: int = 0,
         ) -> list[DataQubit]:
         """Create the device object that will hold all physical qubits, and
         place data qubits within it.
+
+        Args:
+            id_offset: Offset to add to qubit indices.
         
         Returns:
             list of DataQubit objects.
         """
         data: list[DataQubit] = [
-            DataQubit((self.dz*row + col), (2*row+1, 2*col+1)) 
+            DataQubit(id_offset+(self.dz*row + col), (2*row+1, 2*col+1)) 
             for col in range(self.dz) for row in range(self.dx)]
         
         for data_qubit in data:
@@ -234,12 +240,15 @@ class SurfaceCodePatch():
             
         return qubits
 
-    def place_ancilla(self) -> None:
+    def place_ancilla(self, id_offset: int = 0) -> None:
         """Place ancilla (non-data) qubits in the patch. Must be run *after*
         place_data.
+
+        Args:
+            id_offset: Offset to add to qubit indices.
         """
         # number of qubits already placed (= index of next qubit)
-        q_count = len(self.data)
+        q_count = len(self.data) + id_offset
 
         self.x_ancilla: list[MeasureQubit] = []
         self.z_ancilla: list[MeasureQubit] = []
