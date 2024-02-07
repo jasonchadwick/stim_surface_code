@@ -212,10 +212,13 @@ class SurfaceCodePatch():
             self.device[data_qubit.coords[0]][data_qubit.coords[1]] = data_qubit
         return data
 
-    def _get_neighboring_data_qubits(self, coords: tuple[int, int]) -> list[DataQubit | None]:
+    def _get_neighboring_data_qubits(self, coords: tuple[int, int], basis: str) -> list[DataQubit | None]:
         """TODO
         """
-        offsets = np.array([[-1, -1], [-1, +1], [+1, -1], [+1, +1]])
+        if basis == 'Z':
+            offsets = np.array([[-1, -1], [-1, +1], [+1, -1], [+1, +1]])
+        else:
+            offsets = np.array([[-1, -1], [+1, -1], [-1, +1], [+1, +1]])
         qubits = []
         for offset in offsets:
             new_coords = (coords[0] + offset[0], coords[1] + offset[1])
@@ -244,7 +247,7 @@ class SurfaceCodePatch():
             for col in range(self.dz+1):
                 if (row + col) % 2 == 1 and col != 0 and col != self.dz: # X basis
                     coords = (2*row, 2*col)
-                    data_qubits = self._get_neighboring_data_qubits(coords)
+                    data_qubits = self._get_neighboring_data_qubits(coords, 'X')
                     if all(q is None for q in data_qubits):
                         continue
                     measure_q = MeasureQubit(q_count, coords, data_qubits, 'X')
@@ -253,7 +256,7 @@ class SurfaceCodePatch():
                     q_count += 1
                 elif (row + col) % 2 == 0 and row != 0 and row != self.dx: # Z basis
                     coords = (2*row, 2*col)
-                    data_qubits = self._get_neighboring_data_qubits(coords)
+                    data_qubits = self._get_neighboring_data_qubits(coords, 'Z')
                     if all(q is None for q in data_qubits):
                         continue
                     measure_q = MeasureQubit(q_count, coords, data_qubits, 'Z')
@@ -1242,6 +1245,7 @@ class SurfaceCodePatch():
             vmin: float | None = None,
             vmax: float | None = None,
             norm: mpl.colors.Normalize = mpl.colors.Normalize,
+            cbar: mpl.colorbar.Colorbar | None = None,
         ) -> plt.Axes:
         """Plot qubit values as a heatmap.
 
@@ -1260,6 +1264,7 @@ class SurfaceCodePatch():
             vmin: Minimum value for colormap. If None, use min(qubit_vals).
             vmax: Maximum value for colormap. If None, use max(qubit_vals).
             norm: Normalization function for colormap.
+            cbar: If given, use this colorbar instead of creating a new one.
 
         Returns:
             ax: Axes containing plot.
@@ -1270,17 +1275,16 @@ class SurfaceCodePatch():
         ylims = (-1, 2*self.dx+2)
 
         if qubit_vals is not None:
-            min_val = (min(qubit_vals) if vmin is None else vmin)
-            max_val = (max(qubit_vals) if vmin is None else vmax)
+            vmin = min(qubit_vals) if vmin is None else vmin
+            vmax = max(qubit_vals) if vmax is None else vmax
         
         if ax is None:
             fig,ax = plt.subplots(figsize=(6,6))
         else:
             fig = ax.get_figure()
         
-        cbar = None
-        if qubit_vals is not None:
-            cbar = plot_utils.add_cbar(ax, norm(vmin=min_val, vmax=max_val), cmap_name)
+        if cbar is None and qubit_vals is not None:
+            cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name)
 
         ax.invert_yaxis()
         ax.set_aspect('equal')
@@ -1302,7 +1306,7 @@ class SurfaceCodePatch():
                 cmap = mpl.colormaps[cmap_name]
                 qubit_colors = []
                 for i,val in enumerate(qubit_vals):
-                    qubit_colors.append(cmap((val-min_val)/(max_val-min_val)))
+                    qubit_colors.append(cmap((val-vmin)/(vmax-vmin)))
 
         for i,color in enumerate(qubit_colors):
             q = self.qubit_name_dict[i]
