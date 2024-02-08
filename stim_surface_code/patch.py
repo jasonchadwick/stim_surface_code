@@ -116,6 +116,7 @@ class SurfaceCodePatch():
 
         self.ancilla = self.x_ancilla + self.z_ancilla
         self.all_qubits: list[DataQubit | MeasureQubit] = self.ancilla + self.data
+        self.all_qubit_coords = np.array([q.coords for q in self.all_qubits], int)
         # assert len(self.all_qubits) == 2*(dx*dz)-1
         self.qubit_name_dict = {q.idx:q for q in self.all_qubits}
 
