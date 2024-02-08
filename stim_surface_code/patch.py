@@ -1220,6 +1220,28 @@ class SurfaceCodePatch():
             return fractions, stdevs, completed_shots, samples
         return fractions, stdevs, completed_shots, None
 
+    def get_sinter_task(
+            self, 
+            task_kwargs: dict = {},
+            **stim_kwargs
+        ) -> sinter.Task:
+        """Return a Sinter task for the current circuit.
+
+        Args:
+            task_kwargs: Dictionary of additional arguments to pass to the
+                sinter.Task constructor, such as json_metadata or decoder.
+            stim_kwargs: Arguments to pass on to self.get_stim().
+        
+        Returns:
+            Sinter task for the current circuit.
+        """
+        circuit = self.get_stim(**stim_kwargs)
+
+        return sinter.Task(
+            circuit=circuit, 
+            **task_kwargs,
+        )
+
     def get_syndrome_qubits(
             self, 
             only_intermediate_detectors: bool = True, 

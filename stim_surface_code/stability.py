@@ -29,12 +29,12 @@ class StabilityPatch(SurfaceCodePatch):
 
         super().__init__(dx, dz, dm, *args, **kwargs)
 
-    def place_ancilla(self) -> None:
+    def place_ancilla(self, id_offset) -> None:
         """Place ancilla (non-data) qubits in the patch. Must be run *after*
         place_data.
         """
         # number of qubits already placed (= index of next qubit)
-        q_count = len(self.data)
+        q_count = len(self.data) + id_offset
 
         self.observable_ancilla: list[MeasureQubit] = []
         self.boundary_basis_ancilla: list[MeasureQubit] = []
@@ -42,16 +42,16 @@ class StabilityPatch(SurfaceCodePatch):
             for col in range(self.dz+1):
                 if (row + col) % 2 == 1 and not ((row == self.dx and col == 0) or (row == 0 and col == self.dz)): # Boundary basis
                     coords = (2*row, 2*col)
-                    data_qubits = self._get_neighboring_data_qubits(coords)
+                    data_qubits = self._get_neighboring_data_qubits(coords, self.boundary_basis)
                     if all(q is None for q in data_qubits):
                         continue
                     measure_q = MeasureQubit(q_count, coords, data_qubits, self.boundary_basis)
                     self.device[coords[0]][coords[1]] = measure_q
                     self.boundary_basis_ancilla.append(measure_q)
                     q_count += 1
-                elif (row + col) % 2 == 0 and row != 0 and row != self.dx and col != 0 and col != self.dz: # Z basis
+                elif (row + col) % 2 == 0 and row != 0 and row != self.dx and col != 0 and col != self.dz: # Observable basis
                     coords = (2*row, 2*col)
-                    data_qubits = self._get_neighboring_data_qubits(coords)
+                    data_qubits = self._get_neighboring_data_qubits(coords, self.observable_basis)
                     if all(q is None for q in data_qubits):
                         continue
                     measure_q = MeasureQubit(q_count, coords, data_qubits, self.observable_basis)
