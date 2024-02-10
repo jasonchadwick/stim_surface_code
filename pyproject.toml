@@ -7,15 +7,15 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-stim = "^1.12.1"
-sinter = "^1.12.1"
-PyMatching = "^2.1.0"
-matplotlib = "^3.8.2"
-SciPy = "^1.11.4"
-numpy = "^1.26.3"
-typing-extensions = "^4.9.0"
+stim = ">=1.12.1"
+sinter = ">=1.12.1"
+PyMatching = ">=2.1.0"
+matplotlib = ">=3.8.2"
+SciPy = ">=1.11.4"
+numpy = ">=1.26.3"
+typing-extensions = ">=4.9.0"
 qc-utils = {git = "https://github.com/jasonchadwick/qc_utils.git"}
-ipykernel = "^6.28.0"
+ipykernel = ">=6.28.0"
 
 
 [build-system]
