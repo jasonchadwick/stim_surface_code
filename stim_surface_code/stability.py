@@ -82,17 +82,17 @@ class StabilityPatch(SurfaceCodePatch):
         assert self.error_vals_initialized
 
         self.meas_record: list[dict[int, int]] = []
-        
-        observable_ancilla, boundary_basis_ancilla = (
-            (self.x_ancilla, self.z_ancilla) if self.observable_basis == 'X'
-            else (self.z_ancilla, self.x_ancilla)
-        )
 
         circ = stim.Circuit()
 
         # Coords
         for qubit in self.all_qubits:
             circ.append('QUBIT_COORDS', qubit.idx, qubit.coords)
+
+        # Initialization
+        self.apply_reset(circ, [q.idx for q in self.all_qubits])
+        if self.observable_basis == 'X':
+            self.apply_1gate(circ, 'H', [q.idx for q in self.data])
 
         # Syndrome rounds
         self.syndrome_round(
@@ -108,7 +108,7 @@ class StabilityPatch(SurfaceCodePatch):
         self.apply_meas(circ, [q.idx for q in self.data])
 
         # Check consistency of data qubit measurements with last stabilizer measurement
-        for measure in observable_ancilla:
+        for measure in self.observable_ancilla:
             data_rec = [self.get_meas_rec(-1, data.idx) for data in measure.data_qubits if data is not None]
             circ.append('DETECTOR', data_rec + [self.get_meas_rec(-2, measure.idx)], measure.coords + (0,))
 

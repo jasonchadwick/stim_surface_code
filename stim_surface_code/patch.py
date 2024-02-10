@@ -11,6 +11,7 @@ Features:
 from itertools import product, chain, combinations
 import numpy as np
 from numpy.typing import NDArray
+import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import stim
@@ -427,53 +428,75 @@ class SurfaceCodePatch():
                 'T2': 0,
                 'readout_err': 0,
                 'gate1_err': 0,
-                'gate2_err': 0
-            }
+                'gate2_err': 0,
+            },
+            distributions_log: dict[str, bool] = {
+                'T1': False,
+                'T2': False,
+                'readout_err': True,
+                'gate1_err': True,
+                'gate2_err': True,
+            },
         ) -> None:
-        """Set qubit error parameters by drawing from normal distributions.
-        Error rates are assumed to be given in terms of exponents, i.e. a value
-        of -3 corresponds to an error of 10^-3. T1 and T2 are given in units of
-        seconds. 
+        """Set qubit error parameters by drawing from normal distributions. T1
+        and T2 are given in units of seconds. Gate error rates are given as
+        probability of additional depolarizing error per operation (in addition
+        to T1/T2 errors).
+
+        By default, T1 and T2 are sampled from normal distributions. Error rates
+        are sampled from lognormal distributions.
 
         Args:
-            mean_dict: dictionary of mean values for each parameter. Must have
+            mean_dict: Dictionary of mean values for each parameter. Must have
                 entries for T1, T2, readout_err, gate1_err, and gate2_err.
-            stdev_dict: dictionary of standard deviation values for each
+            stdev_dict: Dictionary of standard deviation values for each
                 parameter.
+            distributions_log: Whether each value's normal distribution is on a
+                log scale. Defaults to True for readout_err, gate1_err, and
+                gate2_err.
         """
-        self.error_vals = {
-            'T1': {
-                q.idx: max(np.random.normal(mean_dict['T1'], stdev_dict['T1']), 
-                           0) 
-                for q in self.all_qubits
-            },
-            'T2': {
-                q.idx: max(np.random.normal(mean_dict['T2'], stdev_dict['T2']), 
-                           0) 
-                for q in self.all_qubits
-            },
-            'readout_err': {
-                q.idx: min(10**np.random.normal(mean_dict['readout_err'], 
-                                            stdev_dict['readout_err']),
-                           1)
-                for q in self.all_qubits
-            },
-            'gate1_err': {
-                q.idx: min(10**np.random.normal(mean_dict['gate1_err'], 
-                                            stdev_dict['gate1_err']),
-                           3/4)
-                for q in self.all_qubits
-            },
-            'gate2_err': {
-                qubit_pair: min(10**np.random.normal(mean_dict['gate2_err'], 
-                                                stdev_dict['gate2_err']),
-                                15/16)
-                for qubit_pair in self.qubit_pairs
-            },
+        assert all([k in mean_dict for k in ['T1', 'T2', 'readout_err', 'gate1_err', 'gate2_err']])
+        assert all([k in stdev_dict for k in ['T1', 'T2', 'readout_err', 'gate1_err', 'gate2_err']])
+        assert all([k in distributions_log for k in ['T1', 'T2', 'readout_err', 'gate1_err', 'gate2_err']])
+
+        maxvals = {
+            'T1': np.inf,
+            'T2': np.inf,
+            'readout_err': 1.0,
+            'gate1_err': 3/4,
+            'gate2_err': 15/16,
         }
-        self.saved_stim_circuit_X = None
-        self.saved_stim_circuit_Z = None
-        self.error_vals_initialized = True
+        minvals = {
+            'T1': 0.0,
+            'T2': 0.0,
+            'readout_err': 0.0,
+            'gate1_err': 0.0,
+            'gate2_err': 0.0,
+        }
+
+        assert all([v >= minvals[k] for k,v in mean_dict.items()]), 'Mean values below minimum'
+        assert all([v <= maxvals[k] for k,v in mean_dict.items()]), 'Mean values above maximum'
+        assert all([v >= 0 for v in stdev_dict.values()]), 'Standard deviations must be nonnegative'
+
+        error_val_dict_keys = {
+            'T1': [q.idx for q in self.all_qubits],
+            'T2': [q.idx for q in self.all_qubits],
+            'readout_err': [q.idx for q in self.all_qubits],
+            'gate1_err': [q.idx for q in self.all_qubits],
+            'gate2_err': list(self.qubit_pairs),
+        }
+        
+        error_vals = {}
+        for k,mean in mean_dict.items():
+            if distributions_log[k]:
+                mu = np.log(mean**2 / np.sqrt(mean**2 + stdev_dict[k]**2))
+                sigma = np.sqrt(np.log(1 + stdev_dict[k]**2 / mean**2))
+                vals = np.clip(np.exp(np.random.normal(mu, sigma, size=len(error_val_dict_keys[k]))), minvals[k], maxvals[k])
+            else:
+                vals = np.clip(np.random.normal(mean, stdev_dict[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
+            error_vals[k] = {k:vals[i] for i,k in enumerate(error_val_dict_keys[k])}
+
+        self.set_error_vals(error_vals)
     
     def update_error_vals(
             self, 
@@ -487,10 +510,12 @@ class SurfaceCodePatch():
                 or qubit pairs to their updated values.
         """
         assert self.error_vals_initialized
+
+        modified_error_vals = copy.deepcopy(self.error_vals)
         for name,update_dict in error_dict.items():
-            self.error_vals[name] |= update_dict
-        self.saved_stim_circuit_X = None
-        self.saved_stim_circuit_Z = None
+            modified_error_vals[name] |= update_dict
+        
+        self.set_error_vals(modified_error_vals)
 
     def apply_exclusive_errors(
             self, 
@@ -1268,8 +1293,8 @@ class SurfaceCodePatch():
 
     def plot_qubit_vals(
             self,
-            qubit_vals: list[float] | None = None,
-            qubit_colors: list[list[float]] | None = None,
+            qubit_vals: list[float] | NDArray[np.float_] | None = None,
+            qubit_colors: list[tuple[float | int, ...]] | None = None,
             ax: plt.Axes | None = None,
             plot_text: str = 'idx',
             cmap_name: str = 'viridis',
@@ -1302,39 +1327,37 @@ class SurfaceCodePatch():
             ax: Axes containing plot.
             cbar: Colorbar associated with plot, or None if qubit_vals is None.
         """
-
         xlims = (-1, 2*self.dz+2)
         ylims = (-1, 2*self.dx+2)
 
-        if qubit_vals is not None:
-            vmin = min(qubit_vals) if vmin is None else vmin
-            vmax = max(qubit_vals) if vmax is None else vmax
-        
         if ax is None:
             fig,ax = plt.subplots(figsize=(6,6))
         else:
             fig = ax.get_figure()
+        assert ax is not None
         
-        if cbar is None and qubit_vals is not None:
-            cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name)
+        
 
         ax.invert_yaxis()
         ax.set_aspect('equal')
 
         if qubit_colors is None:
             if qubit_vals is None:
-                qubit_colors = [None] * len(self.all_qubits)
+                qubit_colors = [(0.0, 0.0, 0.0, 0.0)] * len(self.all_qubits)
                 for i,qubit in enumerate(self.all_qubits):
                     if isinstance(qubit, DataQubit):
-                        qubit_colors[qubit.idx] = [1,1,1,1]
+                        qubit_colors[qubit.idx] = (1.0,1.0,1.0,1.0)
                     else:
                         assert isinstance(qubit, MeasureQubit)
                         if qubit.basis == 'X':
                             qubit_colors[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[0], True)
                         else:
                             qubit_colors[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[1], True)
-                assert None not in qubit_colors
             else:
+                if cbar is None:
+                    cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name)
+                vmin = min(qubit_vals) if vmin is None else vmin
+                vmax = max(qubit_vals) if vmax is None else vmax
                 cmap = mpl.colormaps[cmap_name]
                 qubit_colors = []
                 for i,val in enumerate(qubit_vals):
