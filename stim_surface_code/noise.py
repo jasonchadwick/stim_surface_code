@@ -4,6 +4,7 @@ import copy
 from typing_extensions import Self
 import numpy as np
 import qc_utils.stats
+import scipy
 from stim_surface_code.patch import SurfaceCodePatch
 
 class NoiseParams:
@@ -120,29 +121,41 @@ StandardIdenticalNoiseParams = NoiseParams(
     },
 )
 
-GoogleIdenticalNoiseParams = NoiseParams(
-    {
-        'T1':20e-6, 
-        'T2':30e-6, 
-        'gate1_err':8e-4,
-        'gate2_err':5e-3,
-        'readout_err':2e-2,
-    },
-)
+def get_T1T2_gate_err(t1, t2, gate_time):
+    p_x = max(0, 0.25 * (1 - np.exp(-gate_time / t1)))
+    p_y = p_x
+    p_z = max(0, 0.5 * (1 - np.exp(-gate_time / t2)) - p_x)
+    return (p_x+p_y+p_z)
+
+def get_T1T2_limited_params_by_err_rate(target_gate2_err_rate: float, gate2_time: float = 34e-9, t1_over_t2_ratio: float = 1.0):
+    """TODO
+    """
+    t2 = scipy.optimize.minimize(lambda t2: abs(1/target_gate2_err_rate - 1/(2*get_T1T2_gate_err(t1_over_t2_ratio*t2, t2, gate2_time))), 100e-6).x[0]
+    t1 = t1_over_t2_ratio * t2
+    return (t1, t2)
 
 GoogleNoiseParams = NoiseParams(
     {
         'T1':20e-6, 
         'T2':30e-6, 
-        'gate1_err':8e-4,
-        'gate2_err':5e-3,
+        'gate1_err':1e-3 - get_T1T2_gate_err(20e-6, 30e-6, 34e-9),
+        'gate2_err':5e-3 - 2*get_T1T2_gate_err(20e-6, 30e-6, 25e-9),
         'readout_err':2e-3,
     },
     baseline_error_stdevs= {
         'T1':2e-6,
         'T2':5e-6,
-        'gate1_err':1e-4,
-        'gate2_err':1e-3,
+        'gate1_err':1e-5,
+        'gate2_err':5e-4,
         'readout_err':1e-3,
     }
 )
+
+GoogleIdenticalNoiseParams = copy.deepcopy(GoogleNoiseParams)
+GoogleIdenticalNoiseParams.error_stdevs = {
+    'T1':0,
+    'T2':0,
+    'gate1_err':0,
+    'gate2_err':0,
+    'readout_err':0,
+}
