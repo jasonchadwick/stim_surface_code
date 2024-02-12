@@ -12,6 +12,7 @@ from itertools import product, chain, combinations
 import numpy as np
 import numpy_indexed as npi
 from numpy.typing import NDArray
+from typing import Any
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -1132,8 +1133,8 @@ class SurfaceCodePatch():
             fractional_stdev: float = 0.01,
             batch_size: int = 10**5, 
             max_errors: int | None = None,
-            detector_error_model: stim.DetectorErrorModel | None = None,
             use_sinter: bool = True,
+            task_kwargs: dict[str, Any] = {},
             num_workers: int = 6,
             **stim_kwargs,
         ) -> tuple[float, int]:
@@ -1149,9 +1150,9 @@ class SurfaceCodePatch():
             batch_size: If not using Sinter, number of shots to batch together.
             max_errors: If using Sinter, terminate early if we see this many
                 errors.
-            detector_error_model: If given, use for decoding instead of
-                using a perfect-knowledge detector error model.
             use_sinter: If True, simulate in Sinter.
+            task_kwargs: If using Sinter, additional arguments to pass to the
+                sinter.Task constructor.
             num_workers: If using Sinter, number of parallel workers to use.
         
         Returns:
@@ -1160,21 +1161,19 @@ class SurfaceCodePatch():
             completed_shots: Number of simulation shots completed.
         """
         circuit = self.get_stim(**stim_kwargs)
-        if detector_error_model is None:
-            detector_error_model = circuit.detector_error_model(approximate_disjoint_errors=True)
 
         err_rate: float = 0
         if use_sinter:
             task = sinter.Task(
                 circuit=circuit, 
-                detector_error_model=detector_error_model,
+                **task_kwargs,
             )
             stats = sinter.collect(
                 num_workers=num_workers,
                 tasks=[task],
-                decoders=['pymatching'],
-                max_shots=shots,
-                max_errors=max_errors,
+                decoders=(['pymatching'] if 'decoders' not in task_kwargs else None),
+                max_shots=(shots if 'max_shots' not in task_kwargs else None),
+                max_errors=(max_errors if 'max_errors' not in task_kwargs else None),
             )[0]
             num_errors = stats.errors
             completed_shots = stats.shots
