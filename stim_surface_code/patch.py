@@ -20,6 +20,7 @@ import sinter
 import pymatching
 import qc_utils.matplotlib_setup as mpl_setup
 import qc_utils.plot as plot_utils
+import qc_utils.stats
 
 class Qubit():
     """A single physical qubit on a device.
@@ -501,9 +502,7 @@ class SurfaceCodePatch():
         error_vals = {}
         for k,mean in mean_dict.items():
             if distributions_log[k]:
-                mu = np.log(mean**2 / np.sqrt(mean**2 + stdev_dict[k]**2))
-                sigma = np.sqrt(np.log(1 + stdev_dict[k]**2 / mean**2))
-                vals = np.clip(np.exp(np.random.normal(mu, sigma, size=len(error_val_dict_keys[k]))), minvals[k], maxvals[k])
+                vals = np.clip(qc_utils.stats.lognormal(mean, stdev_dict[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             else:
                 vals = np.clip(np.random.normal(mean, stdev_dict[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             error_vals[k] = {k:vals[i] for i,k in enumerate(error_val_dict_keys[k])}

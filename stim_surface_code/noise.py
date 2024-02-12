@@ -3,6 +3,7 @@
 import copy
 from typing_extensions import Self
 import numpy as np
+import qc_utils.stats
 from stim_surface_code.patch import SurfaceCodePatch
 
 class NoiseParams:
@@ -102,9 +103,7 @@ class NoiseParams:
         error_vals = {}
         for k,mean in self.error_means.items():
             if self.distributions_log[k]:
-                mu = np.log(mean**2 / np.sqrt(mean**2 + self.error_stdevs[k]**2))
-                sigma = np.sqrt(np.log(1 + self.error_stdevs[k]**2 / mean**2))
-                vals = np.clip(np.exp(np.random.normal(mu, sigma, size=len(error_val_dict_keys[k]))), minvals[k], maxvals[k])
+                vals = np.clip(qc_utils.stats.lognormal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             else:
                 vals = np.clip(np.random.normal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             error_vals[k] = {k:vals[i] for i,k in enumerate(error_val_dict_keys[k])}
