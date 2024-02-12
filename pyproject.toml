@@ -16,6 +16,9 @@ numpy = ">=1.26.3"
 typing-extensions = ">=4.9.0"
 qc-utils = {git = "https://github.com/jasonchadwick/qc_utils.git"}
 ipykernel = ">=6.28.0"
+viztracer = "^0.16.2"
+ipywidgets = "^8.1.2"
+numpy-indexed = "^0.3.7"
 
 
 [build-system]
