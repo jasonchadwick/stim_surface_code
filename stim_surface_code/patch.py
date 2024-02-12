@@ -1214,6 +1214,7 @@ class SurfaceCodePatch():
             batch_size: int = 1024,
             only_intermediate_detectors: bool = True,
             return_full_data: bool = False,
+            **stim_kwargs,
         ) -> tuple[np.ndarray, np.ndarray, int, np.ndarray | None]:
         """Count detection rate for each detector in circuit. Shots are taken until all standard
         deviations are below `fractional_stdev` or until reaching the maximum number specified by
@@ -1230,6 +1231,7 @@ class SurfaceCodePatch():
                 option also reshapes the returned arrays into shape
                 (self.num_rounds-1, detectors_per_round).
             return_full_data: If True, return individual shot data.
+            stim_kwargs: Arguments to pass on to self.get_stim().
 
         Returns:
             fractions: Rate that each detector signaled.
@@ -1238,7 +1240,7 @@ class SurfaceCodePatch():
             samples: If return_full_data, a list of observed detector signals
                 for each shot(length = competed_shots).
         """
-        circuit = self.get_stim()
+        circuit = self.get_stim(**stim_kwargs)
         num_detectors = circuit.num_detectors
 
         sampler = circuit.compile_detector_sampler()
