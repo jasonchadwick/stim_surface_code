@@ -1209,12 +1209,10 @@ class SurfaceCodePatch():
     def count_detection_events(
             self,
             shots: int, 
-            fractional_stdev: float = 0, 
-            batch_size: int = 1024,
             only_intermediate_detectors: bool = True,
             return_full_data: bool = False,
             **stim_kwargs,
-        ) -> tuple[np.ndarray, np.ndarray, int, np.ndarray | None, np.ndarray | None]:
+        ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
         """Count detection rate for each detector in circuit. Shots are taken until all standard
         deviations are below `fractional_stdev` or until reaching the maximum number specified by
         `shots`.
@@ -1222,9 +1220,6 @@ class SurfaceCodePatch():
         Args:
             shots: Number of shots to take. Should be larger than
                 1/(expected_err_rate).
-            fractional_stdev: Terminate early if standard deviation of observed
-                error rate is less than this fraction of the error rate.
-            batch_size: Number of shots to batch together.
             only_intermediate_detectors: If True, ignore the initial and final
                 detectors and only return counts for mid-circuit detectors. This
                 option also reshapes the returned arrays into shape
@@ -1234,8 +1229,6 @@ class SurfaceCodePatch():
 
         Returns:
             fractions: Rate that each detector signaled.
-            stdevs: Standard deviations of each detector fraction.
-            completed_shots: Number of simulation shots completed.
             detector_samples: If return_full_data, a list of observed detector
                 signals for each shot. Shape is (completed_shots, num_detectors)
                 if only_intermediate_detectors is False, and (completed_shots,
@@ -1245,34 +1238,17 @@ class SurfaceCodePatch():
                 num_observables).
         """
         circuit = self.get_stim(**stim_kwargs)
-        num_detectors = circuit.num_detectors
-        num_observables = circuit.num_observables
 
         sampler = circuit.compile_detector_sampler()
-        detector_samples = np.zeros((int(shots), num_detectors))
-        observable_samples = np.zeros((int(shots), num_observables))
-        totals = np.zeros(num_detectors, dtype=np.uint64)
-        fractions = np.zeros(num_detectors, dtype=float)
-        stdevs = np.zeros(num_detectors, dtype=float)
-        completed_shots = 0
-        while shots > 0:
-            shots_to_take = int(min(batch_size, shots))
-            detector_sample, observable_sample = sampler.sample(shots=shots_to_take, separate_observables=True)
-            if return_full_data:
-                detector_samples[completed_shots:completed_shots+shots_to_take] = detector_sample
-                observable_samples[completed_shots:completed_shots+shots_to_take] = observable_sample
-            totals += np.sum(detector_samples, axis=0, dtype=np.uint64)
-            completed_shots += shots_to_take
-            shots -= shots_to_take
 
-            fractions = totals / completed_shots
-            stdevs = np.sqrt(fractions * (1 - fractions) / completed_shots)
-            if np.all(stdevs < fractions * fractional_stdev):
-                break
+        detector_samples, observable_samples = sampler.sample(shots=shots, separate_observables=True)
+
+        totals = np.sum(detector_samples, axis=0, dtype=np.uint64)
+        fractions = totals / shots
         
-        detector_samples = detector_samples[:completed_shots, :]
-
         if only_intermediate_detectors:
+            num_detectors = circuit.num_detectors
+
             detector_round_indices = np.array(list(circuit.get_detector_coordinates().values()))[:,2]
             init_detector_count = np.sum(detector_round_indices == 0)
             final_detector_count = np.sum(detector_round_indices == self.dm)
@@ -1281,12 +1257,11 @@ class SurfaceCodePatch():
             assert(intermediate_detector_count % (self.dm-1) == 0)
 
             fractions = np.reshape(fractions[init_detector_count : num_detectors-final_detector_count], (self.dm-1, detectors_per_round))
-            stdevs = np.reshape(stdevs[init_detector_count : num_detectors-final_detector_count], (self.dm-1, detectors_per_round))
-            detector_samples = np.reshape(detector_samples[:, init_detector_count : num_detectors-final_detector_count], (completed_shots, self.dm-1, detectors_per_round))
+            detector_samples = np.reshape(detector_samples[:, init_detector_count : num_detectors-final_detector_count], (shots, self.dm-1, detectors_per_round))
 
         if return_full_data:
-            return fractions, stdevs, completed_shots, detector_samples, observable_samples
-        return fractions, stdevs, completed_shots, None, None
+            return fractions, detector_samples, observable_samples
+        return fractions, None, None
 
     def get_sinter_task(
             self, 
