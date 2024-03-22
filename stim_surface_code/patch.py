@@ -12,7 +12,7 @@ from itertools import product, chain, combinations
 import numpy as np
 import numpy_indexed as npi
 from numpy.typing import NDArray
-from typing import Any
+from typing import Any, Callable
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -417,6 +417,8 @@ class SurfaceCodePatch():
                     for idx in self.all_qubit_indices])
         assert all([qubit_pair in error_dict['gate2_err'] 
                     for qubit_pair in self.qubit_pairs])
+        assert all([idx in error_dict['erasure']
+                    for idx in self.all_qubit_indices])
         
         self.error_vals = error_dict
         self._error_vals_numpy = {}
@@ -843,6 +845,32 @@ class SurfaceCodePatch():
             # subtract 1 from all repeat nums and remove elems with 0 more repeats
             pair_repeat_nums = {p:r-1 for p,r in pair_repeat_nums.items() if r > 1}
 
+    def apply_erasures(
+            self,
+            circ: stim.Circuit,
+            qubits: list[int],
+        ):
+        """TODO
+        """
+        if self._error_vals_numpy['erasure'].sum() == 0:
+            return
+        for q in qubits:
+            circ.append('HERALDED_ERASE', q, self.error_vals['erasure'][q])
+            circ.append('DETECTOR', stim.target_rec(-1), self.qubit_name_dict[q].coords + (0,1))
+        # for q in qubits:
+        #     erasure_ancilla_idx = len(self.all_qubits) + q
+        #     circ.append('R', erasure_ancilla_idx)
+        #     if np.random.rand() < self.error_vals['erasure'][q]:
+        #         circ.append('DEPOLARIZE1', q, 3/4)
+        #         circ.append('X_ERROR', erasure_ancilla_idx, 0.99)
+        #     circ.append('M', erasure_ancilla_idx)
+        #     circ.append('DETECTOR', stim.target_rec(-1), self.qubit_name_dict[q].coords + (0,1))
+
+        # Update measurement record indices
+        for round in self.meas_record:
+            for q, idx in round.items():
+                round[q] = idx - len(qubits)
+
     def apply_reset(
             self,
             circ: stim.Circuit,
@@ -1093,6 +1121,8 @@ class SurfaceCodePatch():
                                      for measure in self.x_ancilla
                                      if self.qubits_active[measure.idx]])
 
+        self.apply_erasures(circ, [q.idx for q in self.all_qubits])
+
         # Measure
         self.apply_meas(circ, [measure.idx for measure in self.ancilla
                                if self.qubits_active[measure.idx]])
@@ -1315,13 +1345,14 @@ class SurfaceCodePatch():
             qubit_colors: list[tuple[float | int, ...]] | None = None,
             ax: plt.Axes | None = None,
             plot_text: str = 'idx',
+            val_fmt_fn: Callable[[float], str] | None = None,
             cmap_name: str = 'viridis',
             font_size: int = 12,
             vmin: float | None = None,
             vmax: float | None = None,
             norm: mpl.colors.Normalize = mpl.colors.Normalize,
             cbar: mpl.colorbar.Colorbar | None = None,
-        ) -> plt.Axes:
+        ) -> tuple[plt.Axes, mpl.colorbar.Colorbar | None]:
         """Plot qubit values as a heatmap.
 
         If neither qubit_vals nor qubit_colors are given, plot qubit colors
@@ -1334,6 +1365,8 @@ class SurfaceCodePatch():
             ax: Axes to plot on. If None, create new figure.
             plot_text: If 'idx', plot qubit indices. If 'val', plot qubit vals.
                 If 'none', do not plot text.
+            val_fmt_fn: Function to format qubit values as strings for plotting.
+                If None, format in scientific notation.
             cmap_name: Name of matplotlib colormap to use.
             font_size: Font size for text.
             vmin: Minimum value for colormap. If None, use min(qubit_vals).
@@ -1354,8 +1387,6 @@ class SurfaceCodePatch():
             fig = ax.get_figure()
         assert ax is not None
         
-        
-
         ax.invert_yaxis()
         ax.set_aspect('equal')
 
@@ -1372,10 +1403,10 @@ class SurfaceCodePatch():
                         else:
                             qubit_colors[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[1], True)
             else:
-                if cbar is None:
-                    cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name)
                 vmin = min(qubit_vals) if vmin is None else vmin
                 vmax = max(qubit_vals) if vmax is None else vmax
+                if cbar is None:
+                    cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name)
                 cmap = mpl.colormaps[cmap_name]
                 qubit_colors = []
                 for i,val in enumerate(qubit_vals):
@@ -1399,10 +1430,13 @@ class SurfaceCodePatch():
                     ax.text(coords[1], coords[0], f'{q.basis}', ha='center', va='center', color=text_color, fontsize=font_size)
             elif plot_text == 'idx':
                 ax.text(coords[1], coords[0], f'{i}', ha='center', va='center', color=text_color, fontsize=font_size)
-            elif plot_text == 'val' and qubit_vals is not None and np.isfinite(val):
-                exponent, rem = np.divmod(np.log10(qubit_vals[i]), 1)
-                if np.isfinite(exponent) and np.isfinite(rem):
-                    ax.text(coords[1], coords[0], f'{10**rem:0.1f}e{int(exponent)}', ha='center', va='center', color=text_color, fontsize=font_size)
+            elif plot_text == 'val' and qubit_vals is not None and np.isfinite(qubit_vals[i]):
+                if val_fmt_fn is None:
+                    exponent, rem = np.divmod(np.log10(qubit_vals[i]), 1)
+                    if np.isfinite(exponent) and np.isfinite(rem):
+                        ax.text(coords[1], coords[0], f'{10**rem:0.1f}e{int(exponent)}', ha='center', va='center', color=text_color, fontsize=font_size)
+                else:
+                    ax.text(coords[1], coords[0], val_fmt_fn(qubit_vals[i]), ha='center', va='center', color=text_color, fontsize=font_size)
 
         ax.set_xticks([])
         ax.set_yticks([])

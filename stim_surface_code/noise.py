@@ -29,6 +29,7 @@ class NoiseParams:
                 'gate1_err':0, 
                 'gate2_err':0, 
                 'readout_err':0,
+                'erasure':0,
             },
             distributions_log: dict[str, bool] = {
                 'T1':False, 
@@ -36,6 +37,7 @@ class NoiseParams:
                 'gate1_err':True, 
                 'gate2_err':True, 
                 'readout_err':True,
+                'erasure':True,
             },
         ):
         """Initialize.
@@ -80,6 +82,7 @@ class NoiseParams:
             'readout_err': 1.0,
             'gate1_err': 3/4,
             'gate2_err': 15/16,
+            'erasure': 1.0,
         }
         minvals = {
             'T1': 0.0,
@@ -87,6 +90,7 @@ class NoiseParams:
             'readout_err': 0.0,
             'gate1_err': 0.0,
             'gate2_err': 0.0,
+            'erasure': 0.0,
         }
 
         assert all([v >= minvals[k] for k,v in self.error_means.items()]), 'Mean values below minimum'
@@ -99,12 +103,16 @@ class NoiseParams:
             'readout_err': [q.idx for q in patch.all_qubits],
             'gate1_err': [q.idx for q in patch.all_qubits],
             'gate2_err': list(patch.qubit_pairs),
+            'erasure': [q.idx for q in patch.all_qubits],
         }
         
         error_vals = {}
         for k,mean in self.error_means.items():
             if self.distributions_log[k]:
-                vals = np.clip(qc_utils.stats.lognormal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
+                if self.error_stdevs[k] == 0:
+                    vals = np.full(len(error_val_dict_keys[k]), mean)
+                else:
+                    vals = np.clip(qc_utils.stats.lognormal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             else:
                 vals = np.clip(np.random.normal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             error_vals[k] = {k:vals[i] for i,k in enumerate(error_val_dict_keys[k])}
@@ -118,6 +126,7 @@ StandardIdenticalNoiseParams = NoiseParams(
         'gate1_err':1e-5, 
         'gate2_err':1e-4, 
         'readout_err':1e-4,
+        'erasure':0,
     },
 )
 
@@ -141,6 +150,7 @@ GoogleNoiseParams = NoiseParams(
         'gate1_err':1e-3 - get_T1T2_gate_err(20e-6, 30e-6, 34e-9),
         'gate2_err':5e-3 - 2*get_T1T2_gate_err(20e-6, 30e-6, 25e-9),
         'readout_err':2e-3,
+        'erasure':0,
     },
     baseline_error_stdevs= {
         'T1':2e-6,
@@ -148,6 +158,7 @@ GoogleNoiseParams = NoiseParams(
         'gate1_err':1e-5,
         'gate2_err':5e-4,
         'readout_err':1e-3,
+        'erasure':0,
     }
 )
 
@@ -158,4 +169,5 @@ GoogleIdenticalNoiseParams.error_stdevs = {
     'gate1_err':0,
     'gate2_err':0,
     'readout_err':0,
+    'erasure':0,
 }
