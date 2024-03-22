@@ -1352,6 +1352,7 @@ class SurfaceCodePatch():
             vmax: float | None = None,
             norm: mpl.colors.Normalize = mpl.colors.Normalize,
             cbar: mpl.colorbar.Colorbar | None = None,
+            cbar_kwargs: dict[str, Any] = {},
         ) -> tuple[plt.Axes, mpl.colorbar.Colorbar | None]:
         """Plot qubit values as a heatmap.
 
@@ -1373,6 +1374,7 @@ class SurfaceCodePatch():
             vmax: Maximum value for colormap. If None, use max(qubit_vals).
             norm: Normalization function for colormap.
             cbar: If given, use this colorbar instead of creating a new one.
+            cbar_kwargs: Additional arguments to pass to qc_utils.plot.add_cbar.
 
         Returns:
             ax: Axes containing plot.
@@ -1406,7 +1408,7 @@ class SurfaceCodePatch():
                 vmin = min(qubit_vals) if vmin is None else vmin
                 vmax = max(qubit_vals) if vmax is None else vmax
                 if cbar is None:
-                    cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name)
+                    cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name, **cbar_kwargs)
                 cmap = mpl.colormaps[cmap_name]
                 qubit_colors = []
                 for i,val in enumerate(qubit_vals):
