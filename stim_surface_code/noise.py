@@ -70,11 +70,16 @@ class NoiseParams:
                 new_noise_params.error_stdevs[k] /= improvement_factor
         return new_noise_params
     
-    def set_patch_err_vals(self, patch: SurfaceCodePatch):
+    def set_patch_err_vals(
+            self, 
+            patch: SurfaceCodePatch, 
+            rng: np.random.Generator = np.random.default_rng()
+        ):
         """Set the error values of the patch based on the noise params.
         
         Args:
             patch: The patch to set error values for.
+            rng: Random number generator to use, for reproducibility.
         """
         maxvals = {
             'T1': np.inf,
@@ -114,7 +119,7 @@ class NoiseParams:
                 else:
                     vals = np.clip(qc_utils.stats.lognormal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             else:
-                vals = np.clip(np.random.normal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
+                vals = np.clip(rng.normal(mean, self.error_stdevs[k], size=len(error_val_dict_keys[k])), minvals[k], maxvals[k])
             error_vals[k] = {k:vals[i] for i,k in enumerate(error_val_dict_keys[k])}
 
         patch.set_error_vals(error_vals)
