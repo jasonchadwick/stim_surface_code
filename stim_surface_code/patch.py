@@ -442,6 +442,7 @@ class SurfaceCodePatch():
                 'readout_err': 0,
                 'gate1_err': 0,
                 'gate2_err': 0,
+                'erasure': 0,
             },
             distributions_log: dict[str, bool] = {
                 'T1': False,
@@ -449,6 +450,7 @@ class SurfaceCodePatch():
                 'readout_err': True,
                 'gate1_err': True,
                 'gate2_err': True,
+                'erasure': True,
             },
         ) -> None:
         """Set qubit error parameters by drawing from normal distributions. T1
@@ -481,6 +483,7 @@ class SurfaceCodePatch():
             'readout_err': 1.0,
             'gate1_err': 3/4,
             'gate2_err': 15/16,
+            'erasure': 1.0
         }
         minvals = {
             'T1': 0.0,
@@ -488,6 +491,7 @@ class SurfaceCodePatch():
             'readout_err': 0.0,
             'gate1_err': 0.0,
             'gate2_err': 0.0,
+            'erasure': 0.0
         }
 
         assert all([v >= minvals[k] for k,v in mean_dict.items()]), 'Mean values below minimum'
@@ -500,6 +504,7 @@ class SurfaceCodePatch():
             'readout_err': self.all_qubit_indices.tolist(),
             'gate1_err': self.all_qubit_indices.tolist(),
             'gate2_err': self.qubit_pairs,
+            'erasure': self.all_qubit_indices.tolist(),
         }
         
         error_vals = {}
