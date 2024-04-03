@@ -862,14 +862,6 @@ class SurfaceCodePatch():
         for q in qubits:
             circ.append('HERALDED_ERASE', q, self.error_vals['erasure'][q])
             circ.append('DETECTOR', stim.target_rec(-1), self.qubit_name_dict[q].coords + (0,1))
-        # for q in qubits:
-        #     erasure_ancilla_idx = len(self.all_qubits) + q
-        #     circ.append('R', erasure_ancilla_idx)
-        #     if np.random.rand() < self.error_vals['erasure'][q]:
-        #         circ.append('DEPOLARIZE1', q, 3/4)
-        #         circ.append('X_ERROR', erasure_ancilla_idx, 0.99)
-        #     circ.append('M', erasure_ancilla_idx)
-        #     circ.append('DETECTOR', stim.target_rec(-1), self.qubit_name_dict[q].coords + (0,1))
 
         # Update measurement record indices
         for round in self.meas_record:
@@ -1343,6 +1335,47 @@ class SurfaceCodePatch():
             syndrome_qubits[det - min_idx] = qubit
         assert None not in syndrome_qubits
         return syndrome_qubits
+
+    def get_qubits_in_radius(
+            self,
+            radius: float,
+            center_qubit_idx: int | None = None,
+            center_coords: tuple[int, int] | None = None,
+        ) -> list[int]:
+        """Return a list of all qubits within a certain radius of a qubit. List
+        always contains center qubit, even for radius = 0. Searches
+        self.qubit_layout. 
+        
+        Args:
+            radius: Radius to search within.
+            center_qubit: Center qubit index, or None if using center_coords.
+            center_coords: Coordinates of the center qubit, or None if using
+                center_qubit. Works even if coords do not correspond to a
+                particular qubit, or if coords are beyond device edge
+                boundaries.
+        
+        Returns:
+            List of qubit indices of qubits within radius.
+        """
+        qubits = []
+        if center_coords is None:
+            assert center_qubit_idx is not None
+            qubits.append(center_qubit_idx)
+            center_qubit = self.qubit_name_dict[center_qubit_idx]
+            assert center_qubit is not None
+            center_coords = center_qubit.coords
+        assert center_coords is not None
+        for r_offset in range(-int(np.floor(radius)), int(np.ceil(radius))+1):
+            for c_offset in range(-int(np.floor(radius)), int(np.ceil(radius))+1):
+                if (np.sqrt(r_offset**2 + c_offset**2) <= radius
+                    and center_coords[0]+r_offset >= 0
+                    and center_coords[0]+r_offset < len(self.device)
+                    and center_coords[1]+c_offset >= 0
+                    and center_coords[1]+c_offset < len(self.device[0])):
+                    qubit = self.device[center_coords[0]+r_offset][center_coords[1]+c_offset]
+                    if qubit is not None and qubit.idx != center_qubit_idx:
+                        qubits.append(qubit.idx)
+        return qubits
 
     def plot_qubit_vals(
             self,
