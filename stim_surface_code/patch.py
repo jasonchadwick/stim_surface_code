@@ -64,10 +64,6 @@ class MeasureQubit(Qubit):
 
 class SurfaceCodePatch():
     """A Stim code generator for a single rotated planar surface code tile.
-
-    Attributes:
-        likes_spam: A boolean indicating if we like SPAM or not.
-        eggs: An integer count of the eggs we have laid.
     """
     def __init__(
             self, 
@@ -1097,7 +1093,7 @@ class SurfaceCodePatch():
         self.apply_reset(circ, [measure.idx for measure in self.ancilla
                                 if self.qubits_active[measure.idx]])
 
-        # CNOTs
+        # Gates
         self.apply_1gate(circ, 'H', [measure.idx 
                                      for measure in self.x_ancilla
                                      if self.qubits_active[measure.idx]])
@@ -1379,8 +1375,8 @@ class SurfaceCodePatch():
 
     def plot_qubit_vals(
             self,
-            qubit_vals: list[float] | NDArray[np.float_] | None = None,
-            qubit_colors: list[tuple[float | int, ...]] | None = None,
+            qubit_vals: list[float] | NDArray[np.float_] | dict[int, float] | None = None,
+            qubit_colors: list[tuple[float | int, ...]] | dict[int, tuple[float | int, ...]] | None = None,
             ax: plt.Axes | None = None,
             plot_text: str = 'idx',
             val_fmt_fn: Callable[[float], str] | None = None,
@@ -1430,29 +1426,44 @@ class SurfaceCodePatch():
         ax.invert_yaxis()
         ax.set_aspect('equal')
 
+        if qubit_vals is None:
+            qubit_val_dict = None
+        else:
+            if isinstance(qubit_vals, dict):
+                qubit_val_dict = qubit_vals
+            else:
+                qubit_val_dict = {i:val for i,val in enumerate(qubit_vals)}
         if qubit_colors is None:
-            if qubit_vals is None:
-                qubit_colors = [(0.0, 0.0, 0.0, 0.0)] * len(self.all_qubits)
+            qubit_color_dict = None
+        else:
+            if isinstance(qubit_colors, dict):
+                qubit_color_dict = qubit_colors
+            else:
+                qubit_color_dict = {i:color for i,color in enumerate(qubit_colors)}
+
+        if qubit_color_dict is None:
+            if qubit_val_dict is None:
+                qubit_color_dict = {idx:(0.0, 0.0, 0.0, 0.0) for idx in self.all_qubit_indices}
                 for i,qubit in enumerate(self.all_qubits):
                     if isinstance(qubit, DataQubit):
-                        qubit_colors[qubit.idx] = (1.0,1.0,1.0,1.0)
+                        qubit_color_dict[qubit.idx] = (1.0,1.0,1.0,1.0)
                     else:
                         assert isinstance(qubit, MeasureQubit)
                         if qubit.basis == 'X':
-                            qubit_colors[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[0], True)
+                            qubit_color_dict[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[0], True)
                         else:
-                            qubit_colors[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[1], True)
+                            qubit_color_dict[qubit.idx] = mpl_setup.hex_to_rgb(mpl_setup.colors[1], True)
             else:
-                vmin = min(qubit_vals) if vmin is None else vmin
-                vmax = max(qubit_vals) if vmax is None else vmax
+                vmin = min(qubit_val_dict.values()) if vmin is None else vmin
+                vmax = max(qubit_val_dict.values()) if vmax is None else vmax
                 if cbar is None:
                     cbar = plot_utils.add_cbar(ax, norm(vmin=vmin, vmax=vmax), cmap_name, **cbar_kwargs)
                 cmap = mpl.colormaps[cmap_name]
-                qubit_colors = []
-                for i,val in enumerate(qubit_vals):
-                    qubit_colors.append(cmap((val-vmin)/(vmax-vmin)))
+                qubit_color_dict = {}
+                for i,val in qubit_val_dict.items():
+                    qubit_color_dict[i] = cmap((val-vmin)/(vmax-vmin))
 
-        for i,color in enumerate(qubit_colors):
+        for i,color in qubit_color_dict.items():
             q = self.qubit_name_dict[i]
             coords = q.coords
             xvals = [coords[1], coords[1]+1, coords[1], coords[1]-1]
@@ -1470,13 +1481,13 @@ class SurfaceCodePatch():
                     ax.text(coords[1], coords[0], f'{q.basis}', ha='center', va='center', color=text_color, fontsize=font_size)
             elif plot_text == 'idx':
                 ax.text(coords[1], coords[0], f'{i}', ha='center', va='center', color=text_color, fontsize=font_size)
-            elif plot_text == 'val' and qubit_vals is not None and np.isfinite(qubit_vals[i]):
+            elif plot_text == 'val' and qubit_val_dict is not None and np.isfinite(qubit_val_dict[i]):
                 if val_fmt_fn is None:
-                    exponent, rem = np.divmod(np.log10(qubit_vals[i]), 1)
+                    exponent, rem = np.divmod(np.log10(qubit_val_dict[i]), 1)
                     if np.isfinite(exponent) and np.isfinite(rem):
                         ax.text(coords[1], coords[0], f'{10**rem:0.1f}e{int(exponent)}', ha='center', va='center', color=text_color, fontsize=font_size)
                 else:
-                    ax.text(coords[1], coords[0], val_fmt_fn(qubit_vals[i]), ha='center', va='center', color=text_color, fontsize=font_size)
+                    ax.text(coords[1], coords[0], val_fmt_fn(qubit_val_dict[i]), ha='center', va='center', color=text_color, fontsize=font_size)
 
         ax.set_xticks([])
         ax.set_yticks([])
