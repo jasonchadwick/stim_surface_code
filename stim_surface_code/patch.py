@@ -164,10 +164,6 @@ class SurfaceCodePatch():
         self.correlations = {}
         self.consider_correlations = False
 
-        self.delay_between_rounds = 0
-
-        self.qubit_amplification_repeats: dict[int | tuple[int, int], int] = {}
-
         # determines which qubits are doing things
         self.qubits_active = {i:True for i in self.all_qubit_indices}
 
@@ -413,8 +409,6 @@ class SurfaceCodePatch():
                     for idx in self.all_qubit_indices])
         assert all([qubit_pair in error_dict['gate2_err'] 
                     for qubit_pair in self.qubit_pairs])
-        assert all([idx in error_dict['erasure']
-                    for idx in self.all_qubit_indices])
         
         self.error_vals = error_dict
         self._error_vals_numpy = {}
@@ -438,7 +432,6 @@ class SurfaceCodePatch():
                 'readout_err': 0,
                 'gate1_err': 0,
                 'gate2_err': 0,
-                'erasure': 0,
             },
             distributions_log: dict[str, bool] = {
                 'T1': False,
@@ -446,7 +439,6 @@ class SurfaceCodePatch():
                 'readout_err': True,
                 'gate1_err': True,
                 'gate2_err': True,
-                'erasure': True,
             },
         ) -> None:
         """Set qubit error parameters by drawing from normal distributions. T1
@@ -479,7 +471,6 @@ class SurfaceCodePatch():
             'readout_err': 1.0,
             'gate1_err': 3/4,
             'gate2_err': 15/16,
-            'erasure': 1.0
         }
         minvals = {
             'T1': 0.0,
@@ -487,7 +478,6 @@ class SurfaceCodePatch():
             'readout_err': 0.0,
             'gate1_err': 0.0,
             'gate2_err': 0.0,
-            'erasure': 0.0
         }
 
         assert all([v >= minvals[k] for k,v in mean_dict.items()]), 'Mean values below minimum'
@@ -500,7 +490,6 @@ class SurfaceCodePatch():
             'readout_err': self.all_qubit_indices.tolist(),
             'gate1_err': self.all_qubit_indices.tolist(),
             'gate2_err': self.qubit_pairs,
-            'erasure': self.all_qubit_indices.tolist(),
         }
         
         error_vals = {}
@@ -740,48 +729,38 @@ class SurfaceCodePatch():
                 Appends a TICK instruction after.
         """
         qubits = [q for q in qubits if self.qubits_active[q]]
-        qubit_repeat_nums = dict()
-        for qubit in qubits:
-            if qubit in self.qubit_amplification_repeats:
-                qubit_repeat_nums[qubit] = self.qubit_amplification_repeats[qubit]
-            else:
-                qubit_repeat_nums[qubit] = 1
-        while len(qubit_repeat_nums) > 0:
-            qubits_to_use = list(qubit_repeat_nums.keys())
-            circ.append(gate, qubits_to_use)
-            if self.consider_correlations:
-                for qubit in qubits_to_use:
-                    p = self.error_vals['gate1_err'][qubit]
-                    # Apply depolarizing (equal probability of any Pauli error)
-                    self.apply_exclusive_errors_with_correlations(circ, [qubit], ['X','Y','Z'], [p/3, p/3, p/3], cutoff=self.probability_cutoff)
-            else:
-                targets = np.array(qubits_to_use)
-                target_indices = npi.indices(self.all_qubit_indices, targets, axis=0)
-                ps = self._error_vals_numpy['gate1_err'][target_indices]
-                self.apply_operations(circ, 'DEPOLARIZE1', targets, ps)
 
-            if self.apply_idle_during_gates and unused_qubits_idle:
-                self.apply_idle(
-                    circ, 
-                    self.gate1_time,
-                )
-                circ.append('TICK')
-            elif self.apply_idle_during_gates:
-                self.apply_idle(
-                    circ, 
-                    self.gate1_time, 
-                    idle_qubits=qubits_to_use,
-                )
-            elif unused_qubits_idle:
-                self.apply_idle(
-                    circ, 
-                    self.gate1_time, 
-                    non_idle_qubits=qubits_to_use,
-                )
-                circ.append('TICK')
+        circ.append(gate, qubits)
+        if self.consider_correlations:
+            for qubit in qubits:
+                p = self.error_vals['gate1_err'][qubit]
+                # Apply depolarizing (equal probability of any Pauli error)
+                self.apply_exclusive_errors_with_correlations(circ, [qubit], ['X','Y','Z'], [p/3, p/3, p/3], cutoff=self.probability_cutoff)
+        else:
+            targets = np.array(qubits)
+            target_indices = npi.indices(self.all_qubit_indices, targets, axis=0)
+            ps = self._error_vals_numpy['gate1_err'][target_indices]
+            self.apply_operations(circ, 'DEPOLARIZE1', targets, ps)
 
-            # subtract 1 from all repeat nums and remove elems with 0 more repeats
-            qubit_repeat_nums = {q:r-1 for q,r in qubit_repeat_nums.items() if r > 1}
+        if self.apply_idle_during_gates and unused_qubits_idle:
+            self.apply_idle(
+                circ, 
+                self.gate1_time,
+            )
+            circ.append('TICK')
+        elif self.apply_idle_during_gates:
+            self.apply_idle(
+                circ, 
+                self.gate1_time, 
+                idle_qubits=qubits,
+            )
+        elif unused_qubits_idle:
+            self.apply_idle(
+                circ, 
+                self.gate1_time, 
+                non_idle_qubits=qubits,
+            )
+            circ.append('TICK')
 
     def apply_2gate(
             self, 
@@ -799,70 +778,42 @@ class SurfaceCodePatch():
             qubit_pairs: List of qubit pairs to apply the gate to.
         """
         qubit_pairs = [(q0,q1) for (q0,q1) in qubit_pairs if self.qubits_active[q0] and self.qubits_active[q1]]
-        pair_repeat_nums = dict()
-        for pair in qubit_pairs:
-            if pair in self.qubit_amplification_repeats:
-                pair_repeat_nums[pair] = self.qubit_amplification_repeats[pair]
-            else:
-                pair_repeat_nums[pair] = 1
-        while len(pair_repeat_nums) > 0:
-            pairs_to_use = list(pair_repeat_nums.keys())
-            qubits = []
-            for q1,q2 in pairs_to_use:
-                qubits += [q1, q2]
-            circ.append(gate, qubits)
-            if self.consider_correlations:
-                for q1,q2 in pairs_to_use:
-                    p = self.error_vals['gate2_err'][q1,q2]
-                    # Apply depolarizing (equal probability of any two-qubit Pauli error)
-                    pauli_strings = [ps[0]+ps[1] for ps in product(['I','X','Y','Z'], repeat=2) if ps != ('I','I')]
-                    self.apply_exclusive_errors_with_correlations(circ, [q1,q2], pauli_strings, [p/15]*15, cutoff=self.probability_cutoff)
-            else:
-                targets = np.array(qubit_pairs)
-                target_indices = npi.indices(np.array(self.qubit_pairs), targets, axis=0)
-                ps = self._error_vals_numpy['gate2_err'][target_indices]
-                self.apply_operations(circ, 'DEPOLARIZE2', targets, ps)
-                                                            
-            if self.apply_idle_during_gates and unused_qubits_idle:
-                self.apply_idle(
-                    circ, 
-                    self.gate2_time,
-                )
-                circ.append('TICK')
-            elif self.apply_idle_during_gates:
-                self.apply_idle(
-                    circ, 
-                    self.gate2_time, 
-                    idle_qubits=qubits,
-                )
-            elif unused_qubits_idle:
-                self.apply_idle(
-                    circ, 
-                    self.gate2_time, 
-                    non_idle_qubits=qubits,
-                )
-                circ.append('TICK')
 
-            # subtract 1 from all repeat nums and remove elems with 0 more repeats
-            pair_repeat_nums = {p:r-1 for p,r in pair_repeat_nums.items() if r > 1}
-
-    def apply_erasures(
-            self,
-            circ: stim.Circuit,
-            qubits: list[int],
-        ):
-        """TODO
-        """
-        if self._error_vals_numpy['erasure'].sum() == 0:
-            return
-        for q in qubits:
-            circ.append('HERALDED_ERASE', q, self.error_vals['erasure'][q])
-            circ.append('DETECTOR', stim.target_rec(-1), self.qubit_name_dict[q].coords + (0,1))
-
-        # Update measurement record indices
-        for round in self.meas_record:
-            for q, idx in round.items():
-                round[q] = idx - len(qubits)
+        qubits = []
+        for q1,q2 in qubit_pairs:
+            qubits += [q1, q2]
+        circ.append(gate, qubits)
+        if self.consider_correlations:
+            for q1,q2 in qubit_pairs:
+                p = self.error_vals['gate2_err'][q1,q2]
+                # Apply depolarizing (equal probability of any two-qubit Pauli error)
+                pauli_strings = [ps[0]+ps[1] for ps in product(['I','X','Y','Z'], repeat=2) if ps != ('I','I')]
+                self.apply_exclusive_errors_with_correlations(circ, [q1,q2], pauli_strings, [p/15]*15, cutoff=self.probability_cutoff)
+        else:
+            targets = np.array(qubit_pairs)
+            target_indices = npi.indices(np.array(self.qubit_pairs), targets, axis=0)
+            ps = self._error_vals_numpy['gate2_err'][target_indices]
+            self.apply_operations(circ, 'DEPOLARIZE2', targets, ps)
+                                                        
+        if self.apply_idle_during_gates and unused_qubits_idle:
+            self.apply_idle(
+                circ, 
+                self.gate2_time,
+            )
+            circ.append('TICK')
+        elif self.apply_idle_during_gates:
+            self.apply_idle(
+                circ, 
+                self.gate2_time, 
+                idle_qubits=qubits,
+            )
+        elif unused_qubits_idle:
+            self.apply_idle(
+                circ, 
+                self.gate2_time, 
+                non_idle_qubits=qubits,
+            )
+            circ.append('TICK')
 
     def apply_reset(
             self,
@@ -1113,8 +1064,6 @@ class SurfaceCodePatch():
         self.apply_1gate(circ, 'H', [measure.idx 
                                      for measure in self.x_ancilla
                                      if self.qubits_active[measure.idx]])
-
-        self.apply_erasures(circ, [q.idx for q in self.all_qubits])
 
         # Measure
         self.apply_meas(circ, [measure.idx for measure in self.ancilla
