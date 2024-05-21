@@ -252,16 +252,7 @@ class SurfaceCodePatch():
         self.z_ancilla: list[MeasureQubit] = []
         for row in range(self.dx+1):
             for col in range(self.dz+1):
-                if (row + col) % 2 == 1 and col != 0 and col != self.dz: # X basis
-                    coords = (2*row, 2*col)
-                    data_qubits = self._get_neighboring_data_qubits(coords, 'X')
-                    if all(q is None for q in data_qubits):
-                        continue
-                    measure_q = MeasureQubit(q_count, coords, data_qubits, 'X')
-                    self.device[coords[0]][coords[1]] = measure_q
-                    self.x_ancilla.append(measure_q)
-                    q_count += 1
-                elif (row + col) % 2 == 0 and row != 0 and row != self.dx: # Z basis
+                if (row + col) % 2 == 1 and col != 0 and col != self.dz: # Z basis
                     coords = (2*row, 2*col)
                     data_qubits = self._get_neighboring_data_qubits(coords, 'Z')
                     if all(q is None for q in data_qubits):
@@ -269,6 +260,15 @@ class SurfaceCodePatch():
                     measure_q = MeasureQubit(q_count, coords, data_qubits, 'Z')
                     self.device[coords[0]][coords[1]] = measure_q
                     self.z_ancilla.append(measure_q)
+                    q_count += 1
+                elif (row + col) % 2 == 0 and row != 0 and row != self.dx: # Z basis
+                    coords = (2*row, 2*col)
+                    data_qubits = self._get_neighboring_data_qubits(coords, 'X')
+                    if all(q is None for q in data_qubits):
+                        continue
+                    measure_q = MeasureQubit(q_count, coords, data_qubits, 'X')
+                    self.device[coords[0]][coords[1]] = measure_q
+                    self.x_ancilla.append(measure_q)
                     q_count += 1
 
     def set_logical_operators(self) -> tuple[set[DataQubit], set[DataQubit]]:
@@ -281,9 +281,9 @@ class SurfaceCodePatch():
             logical_z_qubits: Set of DataQubits whose combined Pauli Z product
                 yields the Z observable.
         """
-        logical_z_qubits: set[DataQubit] = {
-            q for q in self.data if q.coords[0] == self.dx}
         logical_x_qubits: set[DataQubit] = {
+            q for q in self.data if q.coords[0] == self.dx}
+        logical_z_qubits: set[DataQubit] = {
             q for q in self.data if q.coords[1] == self.dz}
         return logical_x_qubits, logical_z_qubits
 
@@ -521,8 +521,9 @@ class SurfaceCodePatch():
         assert params.shape[0] == len(targets)
         unique_params = np.unique(params, axis=0)
         for p in unique_params:
-            ts = targets[np.all(params == p, axis=1)]
-            circ.append(operation, ts.flatten(), p)
+            if np.any(p != 0):
+                ts = targets[np.all(params == p, axis=1)]
+                circ.append(operation, ts.flatten(), p)
         
     def apply_exclusive_errors(
             self, 
@@ -705,10 +706,11 @@ class SurfaceCodePatch():
         targets = np.array(idle_qubits)[:,None]
         params = np.zeros((len(idle_qubits), 3))
         for i,q in enumerate(idle_qubits):
-            p_x = max(0, 0.25 * (1 - np.exp(-t*1.0 / self.error_vals['T1'][q])))
-            p_y = p_x
-            p_z = max(0, 0.5 * (1 - np.exp(-t*1.0 / self.error_vals['T2'][q])) - p_x)
-            params[i] = [p_x, p_y, p_z]
+            if np.isfinite(self.error_vals['T1'][q]) or np.isfinite(self.error_vals['T2'][q]):
+                p_x = max(0, 0.25 * (1 - np.exp(-t*1.0 / self.error_vals['T1'][q])))
+                p_y = p_x
+                p_z = max(0, 0.5 * (1 - np.exp(-t*1.0 / self.error_vals['T2'][q])) - p_x)
+                params[i] = [p_x, p_y, p_z]
         self.apply_operations(circ, 'PAULI_CHANNEL_1', targets, params)
         
     def apply_1gate(
@@ -871,7 +873,8 @@ class SurfaceCodePatch():
             circ.append('TICK')
         
         for qubit in qubits:
-            circ.append('M', qubit, self.error_vals['readout_err'][qubit])
+            circ.append('X_ERROR', qubit, self.error_vals['readout_err'][qubit])
+        circ.append('M', qubits)
 
         # Update measurement record indices
         meas_round = {}
@@ -1041,8 +1044,11 @@ class SurfaceCodePatch():
         Returns:
             Modified Stim circuit with a syndrome round appended.
         """
-        self.apply_reset(circ, [measure.idx for measure in self.ancilla
-                                if self.qubits_active[measure.idx]])
+        self.apply_reset(
+            circ, 
+            [measure.idx for measure in self.ancilla
+             if self.qubits_active[measure.idx]],
+        )
 
         # Gates
         self.apply_1gate(circ, 'H', [measure.idx 
@@ -1061,13 +1067,17 @@ class SurfaceCodePatch():
                     if dqi != None:
                         err_qubits += [(dqi.idx, measure.idx)]
             self.apply_2gate(circ,'CX',err_qubits)
+            
         self.apply_1gate(circ, 'H', [measure.idx 
                                      for measure in self.x_ancilla
                                      if self.qubits_active[measure.idx]])
 
         # Measure
-        self.apply_meas(circ, [measure.idx for measure in self.ancilla
-                               if self.qubits_active[measure.idx]])
+        self.apply_meas(
+            circ, 
+            [measure.idx for measure in self.ancilla
+             if self.qubits_active[measure.idx]],
+        )
 
         for ancilla in self.ancilla:
             if (self.qubits_active[ancilla.idx] 

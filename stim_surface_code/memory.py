@@ -27,7 +27,7 @@ class MemoryPatch(SurfaceCodePatch):
     def get_stim(
             self, 
             observable_basis: str = 'Z', 
-            ideal_init_and_meas: bool = False,
+            ideal_init_and_meas: bool = True,
         ) -> stim.Circuit:
         """Generate Stim code performing a memory experiment in desired basis.
         
@@ -72,7 +72,6 @@ class MemoryPatch(SurfaceCodePatch):
 
         # measurement
         if ideal_init_and_meas:
-            # self.measure_logical_operator_ideal(circ, observable_basis, True)
             self.meas_ideal(circ, 'M' if observable_basis == 'Z' else 'MX', [data.idx for data in self.data])
         else:
             # Measure in observable basis
