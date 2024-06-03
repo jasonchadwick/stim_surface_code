@@ -502,6 +502,31 @@ class SurfaceCodePatch():
 
         self.set_error_vals(error_vals)
 
+    def update_error_vals(
+            self,
+            error_dict: dict[str, dict[int | tuple[int, int], float]],
+        ) -> None:
+        """Update physical qubit error rates.
+
+        Args:
+            dict: dictionary mapping error term names to dictionaries of values
+                for each qubit or qubit pair to update. Does not need to contain
+                all terms or qubits.
+        """
+        for k,v in error_dict.items():
+            self.error_vals[k].update(v)
+        self._error_vals_numpy = {}
+        for k,v in self.error_vals.items():
+            # sort by index (or, for qubit pairs, by index in self.qubit_pairs)
+            if k == 'gate2_err':
+                self._error_vals_numpy[k] = np.array([v[pair] for pair in self.qubit_pairs])
+            else:
+                self._error_vals_numpy[k] = np.array([v[idx] for idx in self.all_qubit_indices])
+        
+        self.error_vals_initialized = True
+        self.saved_stim_circuit_X = None
+        self.saved_stim_circuit_Z = None
+
     def apply_operations(self, circ, operation, targets, params):
         """Apply a list of stim circuit operations, aiming to minimize the
         number of (relatively expensive) circuit.append instructions by
